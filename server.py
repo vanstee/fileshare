@@ -1,4 +1,4 @@
-import BaseHTTPServer, traceback, sys
+import BaseHTTPServer, sqlite3, traceback, sys
 
 class FileServer(BaseHTTPServer.BaseHTTPRequestHandler):
 	def do_GET(self):		
@@ -23,16 +23,13 @@ class FileServer(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.send_header("Content-Type", "application/octet-stream"); 
 		self.send_header("Content-Type", "application/download"); 
 		self.send_header("Content-Transfer-Encoding", "binary"); 
-		#self.send_header("Content-Length", ""); 
 		self.send_header("Content-Disposition", "attachment; filename=%s" % filename)
 
 	def address_list(self):
 		self.standard_header()
 		addresses = ""
 		try:
-			f = open("address_list.json", "r")
-			addresses = '{ "result": %s }' % f.read()
-			f.close()
+			addresses = '{ "result": [ %s ] }' % get_address_list()
 		except:
 			addresses = '{ "error": { "code": 100, "message": "Address list not found."} }'	
 		self.wfile.write(addresses)
@@ -68,8 +65,41 @@ class FileServer(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.standard_header()		
 		self.wfile.write('{ "error": { "code": 400, "message": "Malformed URL." } }')
 
+def get_address_list():
+	connection = sqlite3.connect("database")
+	cursor = connection.cursor()
+	addresses = ",".join(' "' + str(row[0]) + '"' for row in cursor.execute("SELECT * FROM addresses"))
+	connection.close()
+	return addresses
+	
+def add_address(address):
+	connection = sqlite3.connect("database")
+	cursor = connection.cursor()
+	cursor.execute("INSERT INTO addresses VALUES (?)", (address,))
+	connection.commit()
+	connection.close()
 
 if __name__ == '__main__':
+	try:
+		open("database", "r")
+	except:
+		connection = sqlite3.connect("database")
+		cursor = connection.cursor()
+		cursor.execute("CREATE TABLE addresses (address TEXT)")
+		connection.commit()
+		connection.close()
+
+	add_address("1.2.3.4")
+	add_address("2.3.4.5")
+	add_address("3.4.5.6")	
+	
 	server = BaseHTTPServer.HTTPServer(("localhost", 8080), FileServer)
-	server.serve_forever()	
+	
+	try:
+		server.serve_forever()
+	except KeyboardInterrupt:
+		pass
+		
+	print
+	
 	server.server_close()
