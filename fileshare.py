@@ -6,27 +6,32 @@ import sys
 import os
 import socket
 
-class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
-	def __init__(self, request, client_address, server):
+class httpserver(BaseHTTPServer.HTTPServer):
+	def __init__(self, server_address, RequestHandlerClass):
 		self.actions = {
-			"/address_list": self.address_list,
-			"/ping": self.ping,
-			"/file_list": self.file_list,
-			"/search": self.search,
-			"/download": self.download		
-		}
+			"address_list": RequestHandlerClass.address_list,
+			"ping": RequestHandlerClass.ping,
+			"file_list": RequestHandlerClass.file_list,
+			"search": RequestHandlerClass.search,
+			"download": RequestHandlerClass.download		
+		}	
 			
 		try:
 			address_file = open("addressses", "r")
+			self.log_message("Opening address list")			
 			self.addresses = json.load(address_file)
 		except:
+			self.log_message("Creating address list")
 			self.addresses = [socket.gethostname()]
 			address_file = open("addresses" ,"w")
 			address_file.write(json.dumps(self.addresses))
 		finally:
+			self.log_message("Loaded address list")			
 			address_file.close()
 		
 		self.files = dict()
+		
+		self.log_message("Creating file list")
 		
 		for path, folders, files in os.walk("./"):
 			for folder in folders:
@@ -34,18 +39,32 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 					folders.remove(folder)
 			for filename in files:
 				self.files[filename] = [path, os.path.getsize(os.path.join(path, filename))]
+				
+		self.log_message("Loaded file list")
 		
-		#print self.files		
+		self.log_message("Fileserver started")	
 		
+		BaseHTTPServer.HTTPServer.__init__(self, server_address, RequestHandlerClass)	
+		
+	def log_message(self, format, *args):
+		print format % args
+
+class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
+	def __init__(self, request, client_address, server):
 		BaseHTTPServer.BaseHTTPRequestHandler.__init__(self, request, client_address, server)
 	
 	def do_GET(self):
-		print self.path		
-		#try:
-		#	self.actions[filter(lambda action: self.path.startswith(action), self.actions)[0]]()
-		#except:
-		#	self.error_header("Unknown action")
-		self.actions[filter(lambda action: self.path.startswith(action), self.actions)[0]]()
+		key = self.path.split("/")[1]
+		
+		self.log_message("%s requested", key)		
+		
+		if key in self.server.actions:
+			self.server.actions[key](self)
+		else:
+			self.error_header("Unknown action")
+		
+		
+		#self.actions[filter(lambda action: self.path.startswith(action), self.actions)[0]]()
 		
 	def standard_header(self, response):
 		self.send_response(200)
@@ -77,7 +96,7 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.wfile.write(json.dumps({ "error": message }))		
 
 	def address_list(self):
-		self.standard_header(json.dumps({ "result": self.addresses }))
+		self.standard_header(json.dumps({ "result": self.server.addresses }))
 		
 	def ping(self):
 		print "address =", self.client_address[0]
@@ -85,36 +104,42 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.standard_header("")			
 		
 	def file_list(self):
-		self.standard_header(json.dumps({ "result": self.files }))
+		self.standard_header(json.dumps({ "result": self.server.files }))
 		
 	def search(self):
 		keyword = self.path.replace("/search/", "")
-		self.standard_header(json.dumps({ "result": filter(lambda f: keyword in f, self.files) }))						
+		self.standard_header(json.dumps({ "result": filter(lambda f: keyword in f, self.server.files) }))						
 		
 	def download(self):
 		try:
 			add_address(self.client_address[0])
 			#print filename			
 			fileitem = self.path.replace("/download/", "")
-			filename = os.path.join(self.files[fileitem][0], fileitem)
+			filename = os.path.join(self.server.files[fileitem][0], fileitem)
 			self.download_header(filename)
 		except:
 			self.wfile.flush()
 			self.error_header("File does not exist")
 	
 	def add_address(self, address):
-		if not address in self.addresses:
-			self.addresses.append(address)
-			f = open("addresses", "w")
-			f.flush()
-			f.write(json.dumps(self.addresses))
-			f.close()
+		if not address in self.server.addresses:
+			self.log_message("Adding %s to address list", address)
+			self.server.addresses.append(address)
+			self.log_message("Saving address list")			
+			try:
+				f = open("addresses", "w")
+				f.flush()
+				f.write(json.dumps(self.server.addresses))
+				f.close()
+				self.log_message("Saved address list")				
+			except:
+				self.log_message("Could not save address list")
 			
 	def log_message(self, format, *args):
 		print format % args
 		
 def main():
-	server = BaseHTTPServer.HTTPServer((socket.gethostname(), 8080), fileserver)
+	server = httpserver((socket.gethostbyname(socket.gethostname()), 8080), fileserver)
 	
 	try:
 		server.serve_forever()
