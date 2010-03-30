@@ -1,7 +1,10 @@
-import BaseHTTPServer, sqlite3, os, json
+import BaseHTTPServer, sqlite3, os, json, socket
 
 class FileServer(BaseHTTPServer.BaseHTTPRequestHandler):
-	def do_GET(self):		
+	def do_GET(self):
+		host, port = self.client_address
+		print "%s:%s" % (host, port)
+				
 		action = {
 			"/address_list": self.address_list,
 			"/file_list": self.file_list,
@@ -76,6 +79,7 @@ def get_address_list():
 	addresses = []
 	for row in cursor.execute("SELECT * FROM addresses"):
 		addresses.append(row[0])
+	#addresses = cursor.execute("SELECT * FROM addresses")
 	connection.close()
 	return addresses
 	
@@ -90,6 +94,8 @@ def get_file_list():
 	connection = sqlite3.connect("database")
 	cursor = connection.cursor()
 	files = dict()
+	print cursor.execute("SELECT * FROM files").__doc__
+	
 	for row in cursor.execute("SELECT * FROM files"):
 		files[row[0]] = row[1]
 	connection.close()
@@ -119,7 +125,7 @@ def main():
 		connection.close()
 		add_files()
 	
-	server = BaseHTTPServer.HTTPServer(("localhost", 8080), FileServer)
+	server = BaseHTTPServer.HTTPServer((socket.gethostname(), 8080), FileServer)
 	
 	try:
 		server.serve_forever()
