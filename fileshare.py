@@ -1,10 +1,10 @@
 import BaseHTTPServer
 import urllib2
-import sqlite3
 import json
 import sys
 import os
 import socket
+import threading
 
 class httpserver(BaseHTTPServer.HTTPServer):
 	def __init__(self, server_address, RequestHandlerClass):
@@ -31,7 +31,7 @@ class httpserver(BaseHTTPServer.HTTPServer):
 		
 		self.files = dict()
 		
-		self.log_message("Creating file list")
+		self.log_message("Creating file list")		
 		
 		for path, folders, files in os.walk("./"):
 			for folder in folders:
@@ -44,7 +44,9 @@ class httpserver(BaseHTTPServer.HTTPServer):
 		
 		self.log_message("Fileserver started")	
 		
-		BaseHTTPServer.HTTPServer.__init__(self, server_address, RequestHandlerClass)	
+		BaseHTTPServer.HTTPServer.__init__(self, server_address, RequestHandlerClass)
+		
+		client()
 		
 	def log_message(self, format, *args):
 		print format % args
@@ -62,7 +64,6 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 			self.server.actions[key](self)
 		else:
 			self.error_header("Unknown action")
-		
 		
 		#self.actions[filter(lambda action: self.path.startswith(action), self.actions)[0]]()
 		
@@ -138,6 +139,70 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 	def log_message(self, format, *args):
 		print format % args
 		
+#class server(threading.Thread):
+#	def run(self):
+#		server = httpserver((socket.gethostbyname(socket.gethostname()), 8080), fileserver)
+#
+#		try:
+#			server.serve_forever()
+#		except KeyboardInterrupt:
+#			pass
+#		finally:
+#			server.server_close()
+			
+class client(threading.Thread):
+	def __init__(self):
+		actions = {
+			"browse": self.browse,
+			"search": self.search,
+			"download": self.download,
+			"help": self.help
+		}
+		
+		action = ""
+
+		while True:
+			input = raw_input().split(" ")[0]
+			action = input
+			print action
+			if action in actions:
+				actions[action](input[1:])
+			else:
+				print "Try 'help' for more information."		
+	
+	def browse(self, args):
+		pass
+	
+	def search(self, args):
+		pass
+	
+	def download(self, args):
+		pass
+
+	def help(self, args):
+		print """
+Actions:
+	
+USAGE: address_list
+Display the list of known server addresses.
+
+USAGE: browse [server_address]
+Display the file list for the specified server.
+EXAMPLE: browse 127.0.0.1
+
+USAGE: search [keyword] [server_address]
+Search for a specified keyword. If no server_address is given all known servers will be searched.
+EXAMPLE: search cats
+EXAMPLE: search cats 127.0.0.1
+
+USAGE: download [filename] [server_address]
+Download a file from the specified server.
+EXAMPLE: download cats.jpg 127.0.0.1
+"""
+
+	def exit(self, args):
+		
+	
 def main():
 	server = httpserver((socket.gethostbyname(socket.gethostname()), 8080), fileserver)
 	
@@ -145,10 +210,8 @@ def main():
 		server.serve_forever()
 	except KeyboardInterrupt:
 		pass
-		
-	print
-	
-	server.server_close()
+	finally:
+		server.server_close()
 				
 if __name__ == "__main__":
 	sys.exit(main())
