@@ -46,8 +46,6 @@ class httpserver(BaseHTTPServer.HTTPServer):
 		
 		BaseHTTPServer.HTTPServer.__init__(self, server_address, RequestHandlerClass)
 		
-		client()
-		
 	def log_message(self, format, *args):
 		print format % args
 
@@ -201,7 +199,7 @@ EXAMPLE: download cats.jpg 127.0.0.1
 """
 
 	def exit(self, args):
-		
+		pass
 	
 def main():
 	server = httpserver((socket.gethostbyname(socket.gethostname()), 8080), fileserver)
