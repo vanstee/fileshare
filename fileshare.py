@@ -142,17 +142,14 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.standard_header("")
 		
 	def file_list(self):
-		files = self.server.files[:]
-		for file in files:
-			file.insert
 		self.standard_header(json.dumps({ "result": self.server.files }))
 		
 	def search(self):
 		keyword = self.path.replace("/search/", "")
 		found = []
 		for file in self.server.files:
-			if keyword in file[0]:
-				found.append(file)
+			if keyword in file:
+				found.append(self.server.files[file])
 		self.standard_header(json.dumps({ "result": found }))						
 		
 	def download(self):
@@ -251,6 +248,7 @@ class search_consumer(threading.Thread):
 class client(threading.Thread):
 	def __init__(self):
 		self.actions = {
+			"address_list": self.address_list,
 			"browse": self.browse,
 			"search": self.search,
 			"download": self.download,
@@ -274,13 +272,18 @@ class client(threading.Thread):
 				self.actions[action](input[1:])
 			else:
 				print "Try 'help' for more information."
-	
+				
+	def address_list(self, args):
+		print "Address list:"
+		for address in self.server_thread.server.addresses:
+			print address
+
 	def browse(self, args):
 		try:
 			url = urllib2.urlopen("http://%s:8080/file_list" % args[0], timeout=5)
 			result = json.loads(url.read())["result"]
 			for key in result:
-				print key, result[key][1]
+				print key, result[key][0], result[key][1]
 		except:
 			print "Invalid server address"
 	
