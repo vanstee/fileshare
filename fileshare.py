@@ -17,7 +17,10 @@ class httpserver(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 			"ping": RequestHandlerClass.ping,
 			"file_list": RequestHandlerClass.file_list,
 			"search": RequestHandlerClass.search,
-			"download": RequestHandlerClass.download		
+			"download": RequestHandlerClass.download,
+			"ajax":	RequestHandlerClass.ajax,
+			"ajaxbrowse": RequestHandlerClass.ajaxbrowse,
+			"ajaxsearch": RequestHandlerClass.ajaxsearch,
 		}
 
 		temp_addresses = []
@@ -33,21 +36,22 @@ class httpserver(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 		while not self.addresses:
 			if not temp_addresses:
 				print 'Address list is empty.'
-
 				valid_address = False
-
 				while not valid_address:
 					address = raw_input("Please enter server address: ")
-					try:
-						url = urllib2.urlopen("http://%s:8080/address_list" % address, timeout=5)
-						temp_addresses = json.loads(url.read())["result"]
-						url.close()
-						valid_address = True
-					except:
-						print "Invalid address."
-						pass
-						
-			print temp_addresses
+					url = urllib2.urlopen("http://%s:8080/address_list" % address, timeout=5)
+					temp_addresses = json.loads(url.read())["result"]
+					url.close()
+					valid_address = True
+					
+					#try:
+					#	url = urllib2.urlopen("http://%s:8080/address_list" % address, timeout=5)
+					#	temp_addresses = json.loads(url.read())["result"]
+					#	url.close()
+					#	valid_address = True
+					#except:
+					#	print "Invalid address."
+					#	pass
 
 			for address in temp_addresses:
 				try:
@@ -71,7 +75,7 @@ class httpserver(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 				if folder.startswith("."):
 					folders.remove(folder)
 			for filename in files:
-				self.files[filename] = [path, os.path.getsize(os.path.join(path, filename))]
+				self.files[filename] = [socket.gethostname(), path, os.path.getsize(os.path.join(path, filename))]
 				
 		self.log_message("Loaded file list")
 		
@@ -138,11 +142,18 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.standard_header("")
 		
 	def file_list(self):
+		files = self.server.files[:]
+		for file in files:
+			file.insert
 		self.standard_header(json.dumps({ "result": self.server.files }))
 		
 	def search(self):
 		keyword = self.path.replace("/search/", "")
-		self.standard_header(json.dumps({ "result": filter(lambda f: keyword in f, self.server.files) }))						
+		found = []
+		for file in self.server.files:
+			if keyword in file[0]:
+				found.append(file)
+		self.standard_header(json.dumps({ "result": found }))						
 		
 	def download(self):
 		try:		
@@ -153,6 +164,42 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 		except:
 			self.wfile.flush()
 			self.error_header("File does not exist")
+			
+	def ajax(self):
+		try:
+			f = open("index.html", "r")
+			self.standard_header(f.read())
+			f.close()
+		except:
+			self.err_header("Ajax interface not available")
+			
+	def ajaxbrowse(self):
+		try:
+			url = urllib2.urlopen("http://%s:8080/file_list" % self.path.replace("/ajaxbrowse/", ""), timeout=5)
+			self.standard_header(url.read())
+			url.close()
+		except:
+			self.error_header("Server not available.")
+	
+	def ajaxsearch(self):
+		queue = Queue.Queue(0)
+		
+		for address in self.server.addresses:
+			queue.put(address)
+		
+		consumer_list = []
+		results = []
+		
+		for i in range(10):
+			consumer_list.append(search_consumer(queue, self.path.replace("/ajaxsearch/", ""), results))
+			
+		for consumer_thread in consumer_list:
+			consumer_thread.start()	
+		
+		for consumer_thread in consumer_list:
+			consumer_thread.join()
+			
+		self.standard_header(json.dumps({"result": results}))
 	
 	# Bugzilla
 	def add_address(self, address):
@@ -192,13 +239,13 @@ class search_consumer(threading.Thread):
 
 	def run(self):
 		while not self.queue.empty():
-			print "looped"
 			address = self.queue.get()
 			request = None
 			try:
 				request = urllib2.urlopen("http://%s:8080/search/%s" % (address, self.filename), timeout=5)
 				self.results += json.loads(request.read())["result"]
 			except:
+				print "Searching %s failed" % address
 				pass
 					
 class client(threading.Thread):
@@ -221,7 +268,7 @@ class client(threading.Thread):
 	def run(self):
 		action = ""
 		while action != "exit":
-			input = raw_input(">> ").split(" ")
+			input = raw_input().split(" ")
 			action = input[0]
 			if action in self.actions:
 				self.actions[action](input[1:])
@@ -230,7 +277,7 @@ class client(threading.Thread):
 	
 	def browse(self, args):
 		try:
-			url = urllib2.urlopen("http://%s:8080/file_list" % args[0])
+			url = urllib2.urlopen("http://%s:8080/file_list" % args[0], timeout=5)
 			result = json.loads(url.read())["result"]
 			for key in result:
 				print key, result[key][1]
@@ -259,7 +306,7 @@ class client(threading.Thread):
 	
 	def download(self, args):
 		try:
-			get_file = urllib2.urlopen("http://%s:8080/download/%s" % (args[0], args[1]))
+			get_file = urllib2.urlopen("http://%s:8080/download/%s" % (args[0], args[1]), timeout=5)
 			new_file = open(args[1], "w")
 			new_file.flush()
 			new_file.write(get_file.read())
@@ -297,7 +344,6 @@ EXAMPLE: download 127.0.0.1 cats.jpg
 def main():
 	client_thread = client()
 	client_thread.start()
-	
 	client_thread.join()
 				
 if __name__ == "__main__":
