@@ -46,12 +46,15 @@ class httpserver(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 				print 'Address list is empty.'
 				valid_address = False
 				while not valid_address:
-					address = raw_input("Please enter server address: ")
-					url = urllib2.urlopen("http://%s:8080/address_list" % address, timeout=5)
-					temp_addresses = json.loads(url.read())["result"]
-					url.close()
-					valid_address = True
-
+					try:
+						address = raw_input("Please enter server address: ")
+						url = urllib2.urlopen("http://%s:8080/address_list" % address, timeout=5)
+						temp_addresses = json.loads(url.read())["result"]
+						url.close()
+						valid_address = True
+					except:
+						print "Could not connect to", address
+						
 			for address in temp_addresses:
 				try:
 					url = urllib2.urlopen("http://%s:8080/ping" % address, timeout=5)
@@ -136,7 +139,7 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 
 	def ping(self):
 		address = self.client_address[0]
-		print "address =", address
+		print "Ping from", address
 		self.add_address(address)
 		self.standard_header("")
 
@@ -154,7 +157,6 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 	def download(self):
 		try:		
 			fileitem = self.path.replace("/download/", "")
-			#print self.server.files
 			filename = os.path.join(self.server.files[fileitem][0], fileitem)
 			self.download_header(filename)
 		except:
@@ -281,8 +283,9 @@ class client(threading.Thread):
 		try:
 			url = urllib2.urlopen("http://%s:8080/file_list" % args[0], timeout=5)
 			result = json.loads(url.read())["result"]
+			print "%-15s %-15s %-15s" % ("name", "server", "size")
 			for key in result:
-				print key, result[key][0], result[key][2]
+				print "%-15s %-15s %-15s" % (key, result[key][0], result[key][2])
 		except:
 			print "Invalid server address"
 
@@ -304,8 +307,9 @@ class client(threading.Thread):
 		for consumer_thread in consumer_list:
 			consumer_thread.join()
 
-		for result in results:
-			print result[0], result[1], result[2]
+		print "%-15s %-15s %-15s" % ("name", "server", "size")
+		for result in results:			
+			print "%-15s %-15s %-15s" % (result[0], result[1], result[2])
 
 	def download(self, args):
 		try:
