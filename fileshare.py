@@ -75,7 +75,7 @@ class httpserver(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 				if folder.startswith("."):
 					folders.remove(folder)
 			for filename in files:
-				self.files[filename] = [socket.gethostname(), path, os.path.getsize(os.path.join(path, filename))]
+				self.files[filename] = [socket.gethostbyname(socket.gethostname()), path, os.path.getsize(os.path.join(path, filename))]
 				
 		self.log_message("Loaded file list")
 		
@@ -128,15 +128,15 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.wfile.write(json.dumps({ "error": message }))		
 
 	def address_list(self):
-		address = socket.gethostbyaddr(self.client_address[0])[0]
+		address = self.client_address[0]
 		addresses = self.server.addresses[:]
-		addresses.append(socket.gethostname())
+		addresses.append(socket.gethostbyname(socket.gethostname()))
 		if address in addresses:
 			addresses.remove(address)
 		self.standard_header(json.dumps({ "result": addresses }))
 		
 	def ping(self):
-		address = socket.gethostbyaddr(self.client_address[0])[0]
+		address = self.client_address[0]
 		print "address =", address
 		self.add_address(address)
 		self.standard_header("")
