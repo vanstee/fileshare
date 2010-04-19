@@ -283,7 +283,7 @@ class client(threading.Thread):
 			url = urllib2.urlopen("http://%s:8080/file_list" % args[0], timeout=5)
 			result = json.loads(url.read())["result"]
 			for key in result:
-				print key, result[key][0], result[key][1]
+				print key, result[key][0], result[key][2]
 		except:
 			print "Invalid server address"
 	
