@@ -43,15 +43,6 @@ class httpserver(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 					temp_addresses = json.loads(url.read())["result"]
 					url.close()
 					valid_address = True
-					
-					#try:
-					#	url = urllib2.urlopen("http://%s:8080/address_list" % address, timeout=5)
-					#	temp_addresses = json.loads(url.read())["result"]
-					#	url.close()
-					#	valid_address = True
-					#except:
-					#	print "Invalid address."
-					#	pass
 
 			for address in temp_addresses:
 				try:
@@ -305,7 +296,8 @@ class client(threading.Thread):
 		for consumer_thread in consumer_list:
 			consumer_thread.join()
 			
-		print results
+		for result in results:
+			print result[0], result[1], result[2]
 	
 	def download(self, args):
 		try:
