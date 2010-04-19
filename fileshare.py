@@ -5,31 +5,61 @@ import sys
 import os
 import socket
 import threading
+import SocketServer
+import Queue
 
-class httpserver(BaseHTTPServer.HTTPServer):
+class httpserver(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 	def __init__(self, server_address, RequestHandlerClass):
+		BaseHTTPServer.HTTPServer.__init__(self, server_address, RequestHandlerClass)		
+		
 		self.actions = {
 			"address_list": RequestHandlerClass.address_list,
 			"ping": RequestHandlerClass.ping,
 			"file_list": RequestHandlerClass.file_list,
 			"search": RequestHandlerClass.search,
 			"download": RequestHandlerClass.download		
-		}	
-			
+		}
+
+		temp_addresses = []
+		self.addresses = []
 		try:
-			address_file = open("addressses", "r")
-			self.log_message("Opening address list")			
-			self.addresses = json.load(address_file)
+			address_file = open("addresses", "r")
+			self.log_message("Opening address list")      
+			tempAdd = json.loads(address_file.read())
+			self.log_message("Loaded address list") 						
 		except:
 			self.log_message("Creating address list")
-			self.addresses = [socket.gethostname()]
-			address_file = open("addresses" ,"w")
-			address_file.write(json.dumps(self.addresses))
-		finally:
-			self.log_message("Loaded address list")			
-			address_file.close()
+
+		while not self.addresses:
+			if not temp_addresses:
+				print 'Address list is empty.\n'
+
+				valid_address = False
+
+				while not valid_address:
+					address = raw_input("Please enter server address: ")
+					try:
+						url = urllib2.urlopen("http://%s:8080/address_list" % address, timeout=5)
+						temp_addresses = json.loads(url.read())["result"]
+						valid_address = True
+					except:
+						print "Invalid address."
+						pass
+
+			for address in temp_addresses:
+				try:
+					urllib2.urlopen("http://%s:8080/ping" % address, timeout=5)
+					self.addresses.append(address)
+				except:
+					self.log_message("Removing %s" % address)
+			temp_addresses = []
 		
-		self.files = dict()
+		
+		address_file = open("addresses" ,"w")
+		address_file.flush()
+		address_file.write(json.dumps(self.addresses))
+		
+		self.files = {}
 		
 		self.log_message("Creating file list")		
 		
@@ -42,9 +72,7 @@ class httpserver(BaseHTTPServer.HTTPServer):
 				
 		self.log_message("Loaded file list")
 		
-		self.log_message("Fileserver started")	
-		
-		BaseHTTPServer.HTTPServer.__init__(self, server_address, RequestHandlerClass)
+		self.log_message("Fileserver started")
 		
 	def log_message(self, format, *args):
 		print format % args
@@ -62,8 +90,6 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 			self.server.actions[key](self)
 		else:
 			self.error_header("Unknown action")
-		
-		#self.actions[filter(lambda action: self.path.startswith(action), self.actions)[0]]()
 		
 	def standard_header(self, response):
 		self.send_response(200)
@@ -89,7 +115,7 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 			f.close()
 		
 	def error_header(self, message):				
-		self.send_response(404)
+		self.send_response(200)
 		self.send_header("Content-Type", "text/html")
 		self.end_headers()		
 		self.wfile.write(json.dumps({ "error": message }))		
@@ -98,9 +124,10 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.standard_header(json.dumps({ "result": self.server.addresses }))
 		
 	def ping(self):
-		print "address =", self.client_address[0]
-		self.add_address(self.client_address[0])
-		self.standard_header("")			
+		address = socket.gethostbyaddr(self.client_address[0])[0]
+		print "address =", address
+		self.add_address(address)
+		self.standard_header("")
 		
 	def file_list(self):
 		self.standard_header(json.dumps({ "result": self.server.files }))
@@ -110,16 +137,16 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.standard_header(json.dumps({ "result": filter(lambda f: keyword in f, self.server.files) }))						
 		
 	def download(self):
-		try:
-			add_address(self.client_address[0])
-			#print filename			
+		try:		
 			fileitem = self.path.replace("/download/", "")
+			#print self.server.files
 			filename = os.path.join(self.server.files[fileitem][0], fileitem)
 			self.download_header(filename)
 		except:
 			self.wfile.flush()
 			self.error_header("File does not exist")
 	
+	# Bugzilla
 	def add_address(self, address):
 		if not address in self.server.addresses:
 			self.log_message("Adding %s to address list", address)
@@ -137,45 +164,101 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 	def log_message(self, format, *args):
 		print format % args
 		
-#class server(threading.Thread):
-#	def run(self):
-#		server = httpserver((socket.gethostbyname(socket.gethostname()), 8080), fileserver)
-#
-#		try:
-#			server.serve_forever()
-#		except KeyboardInterrupt:
-#			pass
-#		finally:
-#			server.server_close()
+class server(threading.Thread):
+	def __init__(self):
+		self.server = httpserver((socket.gethostbyname(socket.gethostname()), 8080), fileserver)
+		threading.Thread.__init__(self)
+	
+	def run(self):
+		try:
+			self.server.serve_forever()
+		except Exception:
+			pass
 			
+class search_consumer(threading.Thread):
+	def __init__(self, queue, filename, results):
+		threading.Thread.__init__(self)
+		self.queue = queue
+		self.filename = filename
+		self.results = results
+
+	def run(self):
+		while not self.queue.empty():
+			print "looped"
+			address = self.queue.get()
+			request = None
+			try:
+				request = urllib2.urlopen("http://%s:8080/search/%s" % (address, self.filename), timeout=5)
+				self.results += json.loads(request.read())["result"]
+			except:
+				pass
+					
 class client(threading.Thread):
 	def __init__(self):
-		actions = {
+		self.actions = {
 			"browse": self.browse,
 			"search": self.search,
 			"download": self.download,
-			"help": self.help
+			"help": self.help,
+			"exit": self.exit
 		}
 		
+		self.running = True
+		
+		self.server_thread = server()
+		self.server_thread.start()
+		
+		threading.Thread.__init__(self)
+		
+	def run(self):
 		action = ""
-
-		while True:
-			input = raw_input().split(" ")[0]
-			action = input
-			print action
-			if action in actions:
-				actions[action](input[1:])
+		while action != "exit":
+			input = raw_input(">> ").split(" ")
+			action = input[0]
+			if action in self.actions:
+				self.actions[action](input[1:])
 			else:
-				print "Try 'help' for more information."		
+				print "Try 'help' for more information."
 	
 	def browse(self, args):
-		pass
+		try:
+			url = urllib2.urlopen("http://%s:8080/file_list" % args[0])
+			result = json.loads(url.read())["result"]
+			for key in result:
+				print key, result[key][1]
+		except:
+			print "Invalid server address"
 	
 	def search(self, args):
-		pass
+		queue = Queue.Queue(0)
+		
+		for address in self.server_thread.server.addresses:
+			queue.put(address)
+		
+		comsumer_list = []
+		results = []
+		
+		for i in range(10):
+			comsumer_list.append(search_consumer(queue, args[0], results))
+			
+		for consumer_thread in comsumer_list:
+			consumer_thread.start()	
+		
+		for consumer_thread in comsumer_list:
+			consumer_thread.join()
+			
+		print results
 	
 	def download(self, args):
-		pass
+		try:
+			get_file = urllib2.urlopen("http://%s:8080/download/%s" % (args[0], args[1]))
+			new_file = open(args[1], "w")
+			new_file.flush()
+			new_file.write(get_file.read())
+			new_file.close()
+		except:
+			print 'Error during download.\n', 'Please check that the server address and file name are correct.'
+			
 
 	def help(self, args):
 		print """
@@ -193,23 +276,21 @@ Search for a specified keyword. If no server_address is given all known servers 
 EXAMPLE: search cats
 EXAMPLE: search cats 127.0.0.1
 
-USAGE: download [filename] [server_address]
+USAGE: download [server_address] [filename]
 Download a file from the specified server.
-EXAMPLE: download cats.jpg 127.0.0.1
+EXAMPLE: download 127.0.0.1 cats.jpg
 """
 
 	def exit(self, args):
-		pass
+		print "server stopped"
+		self.server_thread.server.server_close()
+		self.server_thread.join()
 	
 def main():
-	server = httpserver((socket.gethostbyname(socket.gethostname()), 8080), fileserver)
+	client_thread = client()
+	client_thread.start()
 	
-	try:
-		server.serve_forever()
-	except KeyboardInterrupt:
-		pass
-	finally:
-		server.server_close()
+	client_thread.join()
 				
 if __name__ == "__main__":
 	sys.exit(main())
