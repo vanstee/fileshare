@@ -28,7 +28,7 @@ class httpserver(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 		try:
 			address_file = open("addresses", "r")
 			self.log_message("Opening address list")      
-			tempAdd = json.loads(address_file.read())
+			temp_addresses = json.loads(address_file.read())
 			self.log_message("Loaded address list") 						
 		except:
 			self.log_message("Creating address list")
