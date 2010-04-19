@@ -149,7 +149,7 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 		found = []
 		for file in self.server.files:
 			if keyword in file:
-				found.append(self.server.files[file])
+				found.append([file, self.server.files[file][0], self.server.files[file][2])
 		self.standard_header(json.dumps({ "result": found }))						
 		
 	def download(self):
