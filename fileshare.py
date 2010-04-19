@@ -32,7 +32,7 @@ class httpserver(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 
 		while not self.addresses:
 			if not temp_addresses:
-				print 'Address list is empty.\n'
+				print 'Address list is empty.'
 
 				valid_address = False
 
@@ -41,19 +41,22 @@ class httpserver(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 					try:
 						url = urllib2.urlopen("http://%s:8080/address_list" % address, timeout=5)
 						temp_addresses = json.loads(url.read())["result"]
+						url.close()
 						valid_address = True
 					except:
 						print "Invalid address."
 						pass
+						
+			print temp_addresses
 
 			for address in temp_addresses:
 				try:
-					urllib2.urlopen("http://%s:8080/ping" % address, timeout=5)
+					url = urllib2.urlopen("http://%s:8080/ping" % address, timeout=5)
+					url.close()
 					self.addresses.append(address)
 				except:
 					self.log_message("Removing %s" % address)
 			temp_addresses = []
-		
 		
 		address_file = open("addresses" ,"w")
 		address_file.flush()
@@ -121,7 +124,12 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.wfile.write(json.dumps({ "error": message }))		
 
 	def address_list(self):
-		self.standard_header(json.dumps({ "result": self.server.addresses }))
+		address = socket.gethostbyaddr(self.client_address[0])[0]
+		addresses = self.server.addresses[:]
+		addresses.append(socket.gethostname())
+		if address in addresses:
+			addresses.remove(address)
+		self.standard_header(json.dumps({ "result": addresses }))
 		
 	def ping(self):
 		address = socket.gethostbyaddr(self.client_address[0])[0]
@@ -235,16 +243,16 @@ class client(threading.Thread):
 		for address in self.server_thread.server.addresses:
 			queue.put(address)
 		
-		comsumer_list = []
+		consumer_list = []
 		results = []
 		
 		for i in range(10):
-			comsumer_list.append(search_consumer(queue, args[0], results))
+			consumer_list.append(search_consumer(queue, args[0], results))
 			
-		for consumer_thread in comsumer_list:
+		for consumer_thread in consumer_list:
 			consumer_thread.start()	
 		
-		for consumer_thread in comsumer_list:
+		for consumer_thread in consumer_list:
 			consumer_thread.join()
 			
 		print results
