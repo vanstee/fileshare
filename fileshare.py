@@ -109,7 +109,8 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 	def download_header(self, filepath):
 		self.send_response(200)
 		self.send_header("Content-Type", "application/octet-stream"); 
-		self.send_header("Content-Type", "application/download"); 
+		self.send_header("Content-Type", "application/download");
+		self.send_header("Content-Length", os.path.getsize(filepath));
 		self.send_header("Content-Transfer-Encoding", "binary");
 		self.send_header("Content-Disposition", "attachment; filename=%s" % os.path.basename(filepath))
 		self.end_headers()
