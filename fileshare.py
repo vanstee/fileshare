@@ -157,7 +157,7 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 	def download(self):
 		try:		
 			fileitem = self.path.replace("/download/", "")
-			filename = os.path.join(self.server.files[fileitem][0], fileitem)
+			filename = os.path.join(self.server.files[fileitem][1], fileitem)
 			self.download_header(filename)
 		except:
 			self.wfile.flush()
