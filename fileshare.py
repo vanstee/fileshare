@@ -172,45 +172,57 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 		    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
 		    <title>FileShare</title>
 			<link href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/themes/base/jquery-ui.css" rel="stylesheet" type="text/css"/>
+			<style type="text/css">
+				li { list-style: none; }
+				ul { margin: none; }
+				.grey { color: #c0c0c0; }
+			</style>
 			<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
 			<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.0/jquery-ui.min.js"></script>
 			<script type="text/javascript">
-				$(document).ready(function() {
+			$(document).ready(function() {
+				$("#servers").click(function() {
 					$.getJSON("/address_list", function(address_list) {							
+						$("#address_list").empty();
 						var i;
 						var addresses = address_list["result"];
 						for(i in addresses) {
-							$("#address_list").append("<li><a href=\"#\" class=\"address\">" + addresses[i] + "</a></li>");
+							$("#address_list").append("<li><a href=\\\"#\\\" class=\\\"address\\\">" + addresses[i] + "</a></li>");
 						}
 					});
-
-					$(".address").live("click", function() {
-						var address = $(this).text();
-						$.getJSON("/ajaxbrowse/" + address, function(file_list) {							
-							var i;
-							var files = file_list["result"];
-							$("#files > #file_list").empty();
-							for(i in files) {
-								$("#files > #file_list").append("<li><a href=\"http://130-127-6-51.generic.clemson.edu:8080/download/" + i + "\" class=\"file\">" + i + "</a></li>");
-							}
-						});				
-						$("#tabs").tabs("select", "files");
-					});
-
-					$("#search_query").click(function() {
-						var query = $("#query").val();
-						$.getJSON("/ajaxsearch/" + query, function(file_list) {
-							var i;
-							var files = file_list["result"];
-							$("#search > #file_list").empty();
-							for(i in files) {
-								$("#search > #file_list").append("<li><a href=\"http://130-127-6-51.generic.clemson.edu:8080/download/" + files[i] + "\" class=\"file\">" + files[i] + "</a></li>");
-							}
-						});			
-					});
-
-					$("#tabs").tabs().css("height", $(document).height() - 25);
 				});
+
+				$(".address").live("click", function() {
+					var address = $(this).text();
+					$("#files > #file_list").empty().append("<li>Loading</li>");
+					$.getJSON("/ajaxbrowse/" + address, function(file_list) {							
+						var i;
+						var files = file_list["result"];
+						$("#files > #file_list").empty();
+						for(i in files) {
+							$("#files > #file_list").append("<li><a href=\\\"http://" + files[i][0] + ":8080/download/" + i + "\\\" class=\\\"file\\\">" + i + "</a></li>");
+						}
+					});				
+					$("#tabs").tabs("select", "files");
+				});
+
+				$("#search_query").click(function() {
+					var query = $("#query").val();
+					$("#search > #file_list").empty().append("<li>Searching</li>");					
+					$.getJSON("/ajaxsearch/" + query, function(file_list) {
+						var i;
+						var files = file_list["result"];
+						$("#search > #file_list").empty();
+						for(i in files) {
+							$("#search > #file_list").append("<li><a href=\\\"http://" + files[i][1] + ":8080/download/" + files[i][0] + "\\\" class=\\\"file\\\"> " + files[i][0]  + "<span class=\\\"grey\\\">[server: " + files[i][1] + ", bytes: " + files[i][1] + "]</span></a></li>");
+						}
+					});			
+				});
+
+				$("#tabs").tabs().css("height", $(document).height() - 25);
+				
+				$("#servers").click();
+			});
 			</script>
 		</head>
 		<body>
@@ -221,7 +233,9 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 			        <li><a href="#search"><span>Search</span></a></li>	
 			    </ul>
 			    <div id="servers">
-					<ul id="address_list"></ul>
+					<ul id="address_list">
+						<li>Loading</li>
+					</ul>
 				</div>
 			    <div id="files">
 			    	<ul id="file_list"></ul>
@@ -261,12 +275,16 @@ class fileserver(BaseHTTPServer.BaseHTTPRequestHandler):
 
 		for consumer_thread in consumer_list:
 			consumer_thread.join()
+		
+		files = []
+		for result in results:
+			files.append([result[0], result[1], result[2]])
 
-		self.standard_header(json.dumps({"result": results}))
+		self.standard_header(json.dumps({"result": files}))
 
 	# Bugzilla
 	def add_address(self, address):
-		if not address in self.server.addresses:
+		if not address in self.server.addresses and address != socket.gethostbyname(socket.gethostname()):
 			self.log_message("Adding %s to address list", address)
 			self.server.addresses.append(address)
 			self.log_message("Saving address list")			
